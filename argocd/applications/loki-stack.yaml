@@ -17,7 +17,7 @@ spec:
         valueFiles:
           - $values/observability/loki-values.yaml
 
-    - repoURL: git@github.com:oquinena/homelab-k8s.git
+    - repoURL: https://github.com/oquinena/homelab-k8s.git
       targetRevision: HEAD
       ref: values
 
