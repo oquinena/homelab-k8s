@@ -151,6 +151,13 @@ promtail:
 gateway:
   enabled: false
 
+# Disable caching components to reduce resource usage
+chunksCache:
+  enabled: false
+
+resultsCache:
+  enabled: false
+
 monitoring:
   selfMonitoring:
     enabled: false
