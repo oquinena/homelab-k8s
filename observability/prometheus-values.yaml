@@ -1,0 +1,136 @@
+# kube-prometheus-stack values for resource-constrained single-machine cluster
+# Focus: Application monitoring, not deep cluster monitoring
+
+# Prometheus configuration
+prometheus:
+  prometheusSpec:
+    # Resource limits
+    resources:
+      requests:
+        cpu: 100m
+        memory: 200Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    # Retention and storage
+    retention: 15d
+    retentionSize: "5GB"
+
+    # Scrape interval (30s instead of default 15s to reduce load)
+    scrapeInterval: 30s
+    evaluationInterval: 30s
+
+    # Storage using emptyDir (acceptable for 15-day retention)
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 5Gi
+
+    # ServiceMonitor selector - monitor all namespaces
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+    # Disable unnecessary monitoring
+    additionalScrapeConfigs: []
+
+# Grafana configuration
+grafana:
+  enabled: true
+
+  # Admin credentials (change in production)
+  adminPassword: prom-operator
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 50m
+      memory: 100Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  # NodePort service
+  service:
+    type: NodePort
+    nodePort: 30300
+
+  # Pre-configure Loki as datasource
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://loki:3100
+      jsonData:
+        maxLines: 1000
+
+  # Persistence disabled (acceptable for dashboards that can be recreated)
+  persistence:
+    enabled: false
+
+  # Default dashboards
+  defaultDashboardsEnabled: true
+  defaultDashboardsTimezone: UTC
+
+# Alertmanager configuration
+alertmanager:
+  enabled: true
+
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 50Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+    # Minimal storage
+    storage:
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 1Gi
+
+# Disable cluster monitoring components we don't need
+kubeApiServer:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+
+kubeProxy:
+  enabled: false
+
+# Keep node exporter (useful for node-level metrics)
+nodeExporter:
+  enabled: true
+
+# Keep kube-state-metrics (useful for pod/deployment metrics)
+kubeStateMetrics:
+  enabled: true
+
+# Disable CoreDNS monitoring (focus on apps)
+coreDns:
+  enabled: false
+
+# Disable kubelet metrics from kube-system
+kubelet:
+  enabled: true
+  namespace: kube-system
+
+  # Only monitor cAdvisor metrics, disable other kubelet endpoints
+  serviceMonitor:
+    cAdvisor: true
+    probes: false
+    resource: false
+    resourcePath: "/metrics/resource"
