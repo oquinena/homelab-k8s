@@ -33,8 +33,16 @@ prometheus:
     serviceMonitorSelectorNilUsesHelmValues: false
     podMonitorSelectorNilUsesHelmValues: false
 
-    # Disable unnecessary monitoring
-    additionalScrapeConfigs: []
+    # Additional scrape targets for external systems
+    additionalScrapeConfigs:
+      - job_name: 'openwrt-router'
+        static_configs:
+          - targets: ['192.168.1.1:9100']
+            labels:
+              instance: 'openwrt-router'
+              environment: 'homelab'
+        scrape_interval: 30s
+        scrape_timeout: 10s
 
 # Grafana configuration
 grafana:
