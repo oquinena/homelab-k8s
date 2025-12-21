@@ -51,6 +51,13 @@ grafana:
   # Admin credentials (change in production)
   adminPassword: prom-operator
 
+  # Anonymous access for public viewing
+  grafana.ini:
+    auth.anonymous:
+      enabled: true
+      org_role: Viewer
+      org_name: Main Org.
+
   # Resource limits
   resources:
     requests:
