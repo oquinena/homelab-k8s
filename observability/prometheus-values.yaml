@@ -82,6 +82,14 @@ grafana:
   defaultDashboardsEnabled: true
   defaultDashboardsTimezone: UTC
 
+  # Community dashboards from grafana.com
+  dashboards:
+    default:
+      openwrt-community:
+        gnetId: 11147
+        revision: 1
+        datasource: Prometheus
+
 # Alertmanager configuration
 alertmanager:
   enabled: true
