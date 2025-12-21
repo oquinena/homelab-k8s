@@ -1,0 +1,22 @@
+# Cilium CNI configuration
+
+# Cluster configuration
+cluster:
+  name: kubernetes
+
+# IP Address Management
+ipam:
+  mode: cluster-pool
+  operator:
+    clusterPoolIPv4PodCIDRList: 10.0.0.0/16
+
+# Replace kube-proxy with eBPF
+kubeProxyReplacement: true
+
+# Operator configuration
+operator:
+  replicas: 1
+
+# Routing mode
+routingMode: tunnel
+tunnelProtocol: vxlan
