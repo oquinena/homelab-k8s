@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: metallb-excludel2
+  namespace: metallb-system
+data:
+  # Empty configmap - used by MetalLB speaker pods to exclude network interfaces
+  # Add interface names here if needed, e.g.:
+  # exclude: "docker0,virbr0"

@@ -1,0 +1,21 @@
+# MetalLB Helm Chart Values
+# Fixes for webhook certificate and volume mount issues after node restarts
+
+controller:
+  # Make webhook certificate volume optional to allow controller to start
+  # even if the cert secret doesn't exist yet (it will be auto-generated)
+  volumeMounts:
+    - name: cert
+      mountPath: /tmp/k8s-webhook-server/serving-certs
+      readOnly: true
+
+  volumes:
+    - name: cert
+      secret:
+        secretName: metallb-webhook-cert
+        optional: true  # This allows the pod to start without the secret
+
+speaker:
+  # Speakers are configured via the excludel2 configmap
+  # which is now managed separately in networking/metallb-excludel2.yaml
+  tolerateMaster: true

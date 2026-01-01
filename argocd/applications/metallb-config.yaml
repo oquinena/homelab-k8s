@@ -13,7 +13,7 @@ spec:
     targetRevision: HEAD
     path: networking
     directory:
-      include: metallb-config.yaml
+      include: "{metallb-config.yaml,metallb-excludel2.yaml}"
 
   destination:
     server: https://kubernetes.default.svc
