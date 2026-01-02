@@ -1,2 +1,6 @@
 .DS_Store
 observability/grafana-admin-secret.yaml
+
+# cert-manager secrets
+cert-manager/loopia-credentials-secret.yaml
+cert-manager/cert-sync-ssh-key-secret.yaml
