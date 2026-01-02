@@ -1,0 +1,131 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acme-sh-script
+  namespace: cert-manager
+data:
+  issue-cert.sh: |
+    #!/bin/sh
+    set -e
+
+    # Install acme.sh
+    curl https://get.acme.sh | sh -s email=daniel.oquinena@gmail.com
+
+    # Loopia credentials will be provided via environment variables
+    # LOOPIA_User and LOOPIA_Password are set from the secret
+
+    # Use the installed acme.sh path
+    ACME_SH="/acmebin/acme.sh"
+
+    # Issue certificate from Let's Encrypt production
+    $ACME_SH --issue \
+      --dns dns_loopia \
+      -d int.oquinena.com \
+      -d '*.int.oquinena.com' \
+      --server letsencrypt \
+      --force
+
+    # Export certificate and key
+    $ACME_SH --install-cert \
+      -d int.oquinena.com \
+      --cert-file /certs/tls.crt \
+      --key-file /certs/tls.key \
+      --fullchain-file /certs/fullchain.crt \
+      --ca-file /certs/ca.crt
+
+    # Fix permissions for kubectl container
+    chmod 644 /certs/*
+
+    echo "Certificate issued successfully"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: acme-sh-issue-cert
+  namespace: cert-manager
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: acme-sh-sa
+      containers:
+      - name: acme-sh
+        image: neilpang/acme.sh:latest
+        command: ["/bin/sh", "/scripts/issue-cert.sh"]
+        env:
+        - name: LOOPIA_User
+          valueFrom:
+            secretKeyRef:
+              name: loopia-credentials
+              key: username
+        - name: LOOPIA_Password
+          valueFrom:
+            secretKeyRef:
+              name: loopia-credentials
+              key: password
+        volumeMounts:
+        - name: script
+          mountPath: /scripts
+        - name: certs
+          mountPath: /certs
+      - name: kubectl
+        image: bitnami/kubectl:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Wait for certificates to be ready
+          while [ ! -f /certs/fullchain.crt ] || [ ! -f /certs/tls.key ]; do
+            echo "Waiting for certificates..."
+            sleep 2
+          done
+
+          echo "Creating Kubernetes secret..."
+          kubectl create secret tls int-oquinena-com-tls \
+            -n cert-manager \
+            --cert=/certs/fullchain.crt \
+            --key=/certs/tls.key \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          echo "Secret created successfully!"
+        volumeMounts:
+        - name: certs
+          mountPath: /certs
+          readOnly: true
+      volumes:
+      - name: script
+        configMap:
+          name: acme-sh-script
+          defaultMode: 0755
+      - name: certs
+        emptyDir: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: acme-sh-sa
+  namespace: cert-manager
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: acme-sh-secret-manager
+  namespace: cert-manager
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: acme-sh-secret-manager
+  namespace: cert-manager
+subjects:
+- kind: ServiceAccount
+  name: acme-sh-sa
+  namespace: cert-manager
+roleRef:
+  kind: Role
+  name: acme-sh-secret-manager
+  apiGroup: rbac.authorization.k8s.io

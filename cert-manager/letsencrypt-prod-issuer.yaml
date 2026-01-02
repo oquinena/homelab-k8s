@@ -11,15 +11,12 @@ spec:
     solvers:
     - dns01:
         webhook:
-          groupName: acme.identitry.com
+          groupName: acme.webhook.loopia.com
           solverName: loopia
           config:
-            apiUrlRef:
-              key: apiUrl
+            usernameSecretKeyRef:
               name: loopia-credentials
-            usernameRef:
               key: username
+            passwordSecretKeyRef:
               name: loopia-credentials
-            passwordRef:
               key: password
-              name: loopia-credentials
