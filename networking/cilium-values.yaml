@@ -20,3 +20,13 @@ operator:
 # Routing mode
 routingMode: tunnel
 tunnelProtocol: vxlan
+
+# Ingress controller
+ingressController:
+  enabled: true
+  loadbalancerMode: dedicated
+  default: true
+  service:
+    annotations:
+      metallb.universe.tf/address-pool: lan-pool
+    loadBalancerIP: "192.168.1.52"
