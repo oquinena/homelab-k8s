@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: certificate-alerts
+  namespace: observability
+data:
+  certificate-alerts.yaml: |
+    groups:
+    - name: certificates
+      interval: 1h
+      rules:
+      - alert: CertificateExpiringSoon
+        expr: (cert_not_after - time()) / 86400 < 15
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Certificate expiring soon"
+          description: "TLS certificate expires in less than 15 days"
