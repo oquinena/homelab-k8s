@@ -9,6 +9,6 @@ data:
       - name: homeassistant
         host: 192.168.1.181
         user: nomad
-        cert_path: /etc/ssl/int.oquinena.com/tls.crt
-        key_path: /etc/ssl/int.oquinena.com/tls.key
-        reload_command: "systemctl reload home-assistant@homeassistant || true"
+        cert_path: /ssl/int.oquinena.com/tls.crt
+        key_path: /ssl/int.oquinena.com/tls.key
+        reload_command: "ha core restart || true"

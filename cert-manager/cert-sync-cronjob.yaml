@@ -38,9 +38,9 @@ spec:
               # Create remote directory
               ssh -o StrictHostKeyChecking=no ${USER}@${HOST} "mkdir -p $(dirname ${CERT_PATH})"
 
-              # Copy certificate files
-              scp -o StrictHostKeyChecking=no /certs/tls.crt ${USER}@${HOST}:${CERT_PATH}
-              scp -o StrictHostKeyChecking=no /certs/tls.key ${USER}@${HOST}:${KEY_PATH}
+              # Copy certificate files using SSH (Home Assistant OS doesn't support SCP)
+              cat /certs/tls.crt | ssh -o StrictHostKeyChecking=no ${USER}@${HOST} "cat > ${CERT_PATH}"
+              cat /certs/tls.key | ssh -o StrictHostKeyChecking=no ${USER}@${HOST} "cat > ${KEY_PATH}"
 
               # Set permissions
               ssh -o StrictHostKeyChecking=no ${USER}@${HOST} "chmod 644 ${CERT_PATH} && chmod 600 ${KEY_PATH}"
