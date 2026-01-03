@@ -1,0 +1,175 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acme-sh-renewal-script
+  namespace: cert-manager
+data:
+  renew-cert.sh: |
+    #!/bin/sh
+    set -e
+
+    echo "=== Certificate Renewal Check ==="
+
+    # Install kubectl for checking existing certificate
+    echo "Installing kubectl..."
+    apk add --no-cache curl
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    chmod +x kubectl
+    mv kubectl /usr/local/bin/
+
+    # Check if certificate exists and get expiry date
+    if kubectl get secret int-oquinena-com-tls -n cert-manager >/dev/null 2>&1; then
+      echo "Checking existing certificate expiry..."
+
+      # Get certificate expiry as Unix timestamp
+      EXPIRY=$(kubectl get secret int-oquinena-com-tls -n cert-manager -o jsonpath='{.data.tls\.crt}' | \
+        base64 -d | openssl x509 -noout -enddate | cut -d= -f2)
+
+      EXPIRY_EPOCH=$(date -d "$EXPIRY" +%s 2>/dev/null || date -j -f "%b %d %T %Y %Z" "$EXPIRY" +%s)
+      NOW_EPOCH=$(date +%s)
+      DAYS_LEFT=$(( ($EXPIRY_EPOCH - $NOW_EPOCH) / 86400 ))
+
+      echo "Certificate expires in $DAYS_LEFT days ($EXPIRY)"
+
+      # Only renew if less than 30 days remaining
+      if [ $DAYS_LEFT -gt 30 ]; then
+        echo "Certificate still valid for $DAYS_LEFT days. No renewal needed."
+        # Signal to kubectl container that no renewal was needed
+        echo "SKIP" > /certs/renewal-status
+        exit 0
+      fi
+
+      echo "Certificate expires in $DAYS_LEFT days. Renewal needed."
+    else
+      echo "No existing certificate found. Issuing new certificate."
+    fi
+
+    # Install acme.sh
+    echo "Installing acme.sh..."
+    curl -s https://get.acme.sh | sh -s email=daniel.oquinena@gmail.com
+
+    # Loopia credentials will be provided via environment variables
+    # LOOPIA_User and LOOPIA_Password are set from the secret
+
+    # Use the installed acme.sh path
+    ACME_SH="/acmebin/acme.sh"
+
+    # Issue certificate from Let's Encrypt production
+    echo "Issuing certificate..."
+    $ACME_SH --issue \
+      --dns dns_loopia \
+      -d int.oquinena.com \
+      -d '*.int.oquinena.com' \
+      --server letsencrypt \
+      --force
+
+    # Export certificate and key
+    echo "Exporting certificate files..."
+    $ACME_SH --install-cert \
+      -d int.oquinena.com \
+      --cert-file /certs/tls.crt \
+      --key-file /certs/tls.key \
+      --fullchain-file /certs/fullchain.crt \
+      --ca-file /certs/ca.crt
+
+    # Fix permissions for kubectl container
+    chmod 644 /certs/*
+
+    # Signal to kubectl container that renewal succeeded
+    echo "SUCCESS" > /certs/renewal-status
+
+    echo "Certificate renewal completed successfully"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: acme-sh-cert-renewal
+  namespace: cert-manager
+spec:
+  # Run weekly on Sunday at 2 AM (before cert-sync at 3 AM)
+  schedule: "0 2 * * 0"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: acme-sh-sa
+          containers:
+          - name: acme-sh
+            image: neilpang/acme.sh:latest
+            command: ["/bin/sh", "/scripts/renew-cert.sh"]
+            env:
+            - name: LOOPIA_User
+              valueFrom:
+                secretKeyRef:
+                  name: loopia-credentials
+                  key: username
+            - name: LOOPIA_Password
+              valueFrom:
+                secretKeyRef:
+                  name: loopia-credentials
+                  key: password
+            volumeMounts:
+            - name: script
+              mountPath: /scripts
+            - name: certs
+              mountPath: /certs
+          - name: kubectl
+            image: bitnami/kubectl:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Wait for acme-sh container to complete
+              timeout=300  # 5 minutes timeout
+              elapsed=0
+              while [ ! -f /certs/renewal-status ]; do
+                if [ $elapsed -ge $timeout ]; then
+                  echo "Timeout waiting for renewal status"
+                  exit 1
+                fi
+                echo "Waiting for renewal status..."
+                sleep 5
+                elapsed=$((elapsed + 5))
+              done
+
+              STATUS=$(cat /certs/renewal-status)
+              echo "Renewal status: $STATUS"
+
+              if [ "$STATUS" = "SKIP" ]; then
+                echo "No renewal was performed (certificate still valid)"
+                exit 0
+              fi
+
+              if [ "$STATUS" = "SUCCESS" ]; then
+                echo "Renewal completed, updating Kubernetes secret..."
+                kubectl create secret tls int-oquinena-com-tls \
+                  -n cert-manager \
+                  --cert=/certs/fullchain.crt \
+                  --key=/certs/tls.key \
+                  --dry-run=client -o yaml | kubectl apply -f -
+
+                echo "Secret updated successfully!"
+
+                # Get certificate expiry date for logging
+                kubectl get secret int-oquinena-com-tls -n cert-manager -o jsonpath='{.data.tls\.crt}' | \
+                  base64 -d | openssl x509 -noout -enddate
+                exit 0
+              fi
+
+              echo "ERROR: Unknown renewal status: $STATUS"
+              exit 1
+            volumeMounts:
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+          volumes:
+          - name: script
+            configMap:
+              name: acme-sh-renewal-script
+              defaultMode: 0755
+          - name: certs
+            emptyDir: {}
